@@ -2249,14 +2249,14 @@ mamaSubscription_processMsg (mamaSubscription subscription, mamaMsg msg)
         if (gGenerateQueueStats)
         {
             mamaStatsCollector queueStatsCollector ;
-            if (queueStatsCollector = mamaQueueImpl_getStatsCollector (self->mQueue))
+            if ((queueStatsCollector = mamaQueueImpl_getStatsCollector (self->mQueue)))
                 mamaStatsCollector_incrementStat (queueStatsCollector, MamaStatNumMessages.mFid);
         }
 
         if (gGenerateTransportStats)
         {
             mamaStatsCollector tportStatsCollector ;
-            if (tportStatsCollector = mamaTransport_getStatsCollector (self->mTransport))
+            if ((tportStatsCollector = mamaTransport_getStatsCollector (self->mTransport)))
                  mamaStatsCollector_incrementStat (tportStatsCollector, MamaStatNumMessages.mFid);
         }
 
