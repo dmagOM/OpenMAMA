@@ -2049,17 +2049,19 @@ mamaSubscription_processErr (mamaSubscription subscription, int deactivate)
     const char*        source = NULL;
     const char*        symbol = NULL;
     void*              closure = NULL;
-    
+    void*              platformError = NULL;
+
     mamaMsgCallbacks* callbacks = mamaSubscription_getUserCallbacks(subscription);
     if (deactivate)
     {
         mamaSubscription_deactivate (subscription);
     }
     
-    mamaSubscription_getSource   (subscription, &source);
-    mamaSubscription_getSymbol   (subscription, &symbol);
-    mamaSubscription_getClosure  (subscription, &closure);     
-    
+    mamaSubscription_getSource        (subscription, &source);
+    mamaSubscription_getSymbol        (subscription, &symbol);
+    mamaSubscription_getClosure       (subscription, &closure);
+    mamaSubscription_getPlatformError (subscription, &platformError);
+
     if( gMamaLogLevel >= MAMA_LOG_LEVEL_FINER )
     {
         mama_log (MAMA_LOG_LEVEL_FINER, 
@@ -2068,11 +2070,11 @@ mamaSubscription_processErr (mamaSubscription subscription, int deactivate)
     
     /* The error cause should have been set by the calling function */
     
-    callbacks->onError(subscription,
-                        MAMA_STATUS_TIMEOUT,
-                        MAMA_MSG_STATUS_OK,
-                        symbol,
-                        closure); 
+    callbacks->onError(subscription,            /* Subscription */
+                        MAMA_STATUS_TIMEOUT,    /* Status */
+                        platformError,          /* Platform error */
+                        symbol,                 /* Symbol */
+                        closure);               /* Closure */
 
     return MAMA_STATUS_OK;
 }
