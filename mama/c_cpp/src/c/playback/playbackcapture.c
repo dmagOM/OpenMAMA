@@ -138,7 +138,7 @@ int mamaCapture_openFile(mamaPlaybackCapture* mamaCapture,
         status = MAMA_STATUS_INVALID_ARG;
         mama_log (MAMA_LOG_LEVEL_FINE,
                   "mamaCapture_openFile: %s error: unable to open file %s",
-                  mamaMsgStatus_stringForStatus(status),
+                  mamaStatus_stringForStatus(status),
                   impl->myPlayBackFileName);
     }
     return  status;
