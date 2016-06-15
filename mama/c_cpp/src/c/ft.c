@@ -643,7 +643,8 @@ ftTimeoutTimerCb (mamaTimer          timer,
 
     foundheartbeat=0;
 
-    while (impl->ftRecvHearbeat(impl) == 0);;
+    while (impl->ftRecvHearbeat(impl) == 0)
+        ;
 
     if (foundheartbeat==0)
     checkState (impl, MAMA_FT_STATE_ACTIVE);
