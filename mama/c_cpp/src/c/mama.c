@@ -61,172 +61,12 @@
 
 extern void initReservedFields (void);
 
-
-mamaEntitlementCallbacks  gEntitlementCallbacks;
-extern const char*        gEntitlementBridges[MAX_ENTITLEMENT_BRIDGES];
-/* Sats Configuration*/
-int gLogQueueStats          = 1;
-int gLogTransportStats      = 1;
-int gLogGlobalStats         = 1;
-int gLogLbmStats            = 1;
-int gLogUserStats           = 1;
-
-int gGenerateQueueStats     = 0;
-int gGenerateTransportStats = 0;
-int gGenerateGlobalStats    = 0;
-int gGenerateLbmStats       = 0;
-int gGenerateUserStats       = 0;
-
-int gPublishQueueStats      = 0;
-int gPublishTransportStats  = 0;
-int gPublishGlobalStats     = 0;
-int gPublishLbmStats        = 0;
-int gPublishUserStats       = 0;
-
-static mamaStatsLogger  gStatsPublisher  = NULL;
-
-mamaStatsGenerator      gStatsGenerator         = NULL;
-mamaStatsCollector      gGlobalStatsCollector   = NULL;
-
-/* Global Stats */
-mamaStat                gInitialStat;
-mamaStat                gRecapStat;
-mamaStat                gUnknownMsgStat;
-mamaStat                gMessageStat;
-mamaStat                gFtTakeoverStat;
-mamaStat                gSubscriptionStat;
-mamaStat                gTimeoutStat;
-mamaStat                gWombatMsgsStat;
-mamaStat                gFastMsgsStat;
-mamaStat                gRvMsgsStat;
-mamaStat                gPublisherSend;
-mamaStat                gPublisherInboxSend;
-mamaStat                gPublisherReplySend;
-
-mama_bool_t gAllowMsgModify = 0;
-
 mama_status mama_statsInit (void);
 mama_status mama_setupStatsGenerator (void);
 
-int gCatchCallbackExceptions = 0;
-
-wproperty_t             gProperties      = 0;
-
-static mamaPayloadBridge    gDefaultPayload = NULL;
-
-static wthread_key_t last_err_key;
-
-
-/**
- * struct mamaApplicationGroup
- * Contains the name of the application and its class name.
- */
-typedef struct mamaAppContext_
-{
-    const char* myApplicationName;
-    const char* myApplicationClass;
-} mamaApplicationContext;
-
-/**
- * @brief Structure for storing combined mamaBridge and LIB_HANDLE data
- */
-typedef struct mamaMiddlewareLib_
-{
-    mamaBridge  bridge;
-    LIB_HANDLE  library;
-} mamaMiddlewareLib;
-
-
-/**
- * @brief Structure for managing the loaded middleware libraries
- */
-typedef struct mamaMiddlewares_
-{
-    /* wtable of loaded middlewares, keyed by middleware name */
-    wtable_t            table;
-
-    /* Array of loaded middleware libraries, indexed by order of load */
-    mamaMiddlewareLib*  byIndex[MAMA_MAX_MIDDLEWARES];
-
-    /* Count of number of currently loaded middlewares */
-    mama_i32_t          count;
-} mamaMiddlewares;
-
-/**
- * @brief Structure for managing loaded payload libraries
- */
-typedef struct mamaPayloads_
-{
-    /* wtable of loaded payloads, keyed by payload name */
-    wtable_t            table;
-
-    /* Array indexed by char id, for rapid access when required. */
-    mamaPayloadLib*     byChar[MAMA_PAYLOAD_MAX];
-
-    /* Count of number of currently loaded payloads */
-    mama_i32_t          count;
-} mamaPayloads;
-
-/**
- * @brief Structure for managing loaded entitlement libraries
- */
-typedef struct mamaEntitlements_
-{
-    /* wtable of loaded entitlement libraries, keyed by name */
-    wtable_t            table;
-
-    /* Array of loaded entitlement libraries, indexed by order loaded */
-    mamaEntitlementLib* byIndex[MAMA_MAX_ENTITLEMENTS];
-
-    /* Count of number of currently loaded entitlement libraries */
-    mama_i32_t          count;
-} mamaEntitlements;
-
-/**
- * This structure contains data needed to control starting and stopping of
- * mama.
- */
-typedef struct mamaImpl_
-{
-    /* Struct containing loaded middleware bridges. */
-    mamaMiddlewares        middlewares;
-
-    /* Struct containing loaded payload bridges */
-    mamaPayloads           payloads;
-
-    /* Struct containing loaded entitlement bridges */
-    mamaEntitlements       entitlements;
-
-    unsigned int           myRefCount;
-
-    /* wInterlockedInt indicating if the struct has been successfully initialised */
-    wInterlockedInt        init;
-
-    wthread_static_mutex_t myLock;
-
-    /* Internal properties */
-    wproperty_t            internalProperties;
-
-    /* Version Information */
-    versionInfo            version;
-} mamaImpl;
-
-static mamaApplicationContext  appContext;
-static char mama_ver_string[256];
-
-static mamaImpl gImpl = {
-                            { NULL, {0}, 0 },         /* middlewares */
-                            { NULL, {0}, 0 },         /* payloads */
-                            { NULL, {0}, 0 },         /* entitlements */
-                            0,                        /* myRefCount */
-                            0,                        /* init */
-                            WSTATIC_MUTEX_INITIALIZER,/* myLock */
-                            NULL
-                        };
-
 /*
- * Function pointer type for calling getVersion in the wrapper
- */
+* Function pointer type for calling getVersion in the wrapper
+*/
 typedef const char* (MAMACALLTYPE *fpWrapperGetVersion)(void);
 
 static fpWrapperGetVersion wrapperGetVersion = NULL;
@@ -236,16 +76,19 @@ static fpWrapperGetVersion wrapperGetVersion = NULL;
 /* ************************************************************************* */
 
 static mama_status
-mama_loadBridgeWithPathInternal (mamaBridge* impl,
+mama_loadBridgeWithPathInternal (mamaSession session,
+                                 mamaBridge* impl,
                                  const char* middlewareName,
                                  const char* path);
 
 mama_status
-mama_loadPayloadBridgeInternal  (mamaPayloadBridge* impl,
+mama_loadPayloadBridgeInternal  (mamaSession        session,
+                                 mamaPayloadBridge* impl,
                                  const char*        payloadName);
 
 mama_status
-mama_loadEntitlementBridgeInternal  (const char* name);
+mama_loadEntitlementBridgeInternal  (mamaSession session,
+                                     const char* name);
 
 MAMAExpDLL
 void
@@ -278,62 +121,76 @@ mama_freeAppContext(mamaApplicationContext *context)
 }
 
 mama_status
-mama_setApplicationName (const char* applicationName)
+mama_setApplicationName (mamaSession session, const char* applicationName)
 {
-    if (appContext.myApplicationName)
+    mamaSessionImpl        *sessionImpl = (mamaSessionImpl*)session;
+    mamaApplicationContext *appContext  = &(sessionImpl->appContext);
+
+    if (appContext->mApplicationName)
     {
-        free ((void*)appContext.myApplicationName);
-        appContext.myApplicationName = NULL;
+        free ((void*)appContext->mApplicationName);
+        appContext->mApplicationName = NULL;
     }
 
     if (applicationName)
     {
-        appContext.myApplicationName = strdup (applicationName);
+        appContext->mApplicationName = strdup (applicationName);
     }
     return MAMA_STATUS_OK;
 }
 
 mama_status
-mama_setApplicationClassName (const char* className)
+mama_setApplicationClassName (mamaSession session, const char* className)
 {
-    if (appContext.myApplicationClass)
+    mamaSessionImpl        *sessionImpl = (mamaSessionImpl*)session;
+    mamaApplicationContext *appContext  = &(sessionImpl->appContext);
+
+    if (appContext->mApplicationClass)
     {
-        free ((void*)appContext.myApplicationClass);
-        appContext.myApplicationClass = NULL;
+        free ((void*)appContext->mApplicationClass);
+        appContext->mApplicationClass = NULL;
     }
 
     if (className)
     {
-        appContext.myApplicationClass =  strdup (className);
+        appContext->mApplicationClass =  strdup (className);
     }
     return MAMA_STATUS_OK;
 }
 
 mama_status
-mama_getApplicationName (const char**  applicationName)
+mama_getApplicationName (mamaSession session, const char** applicationName)
 {
+    mamaSessionImpl     *sessionImpl = (mamaSessionImpl*)session;
+
     if (applicationName == NULL) return MAMA_STATUS_NULL_ARG;
-    *applicationName = appContext.myApplicationName;
+
+    *applicationName = sessionImpl->appContext.mApplicationName;
     return MAMA_STATUS_OK;
 }
 
 mama_status
-mama_getApplicationClassName (const char** className)
+mama_getApplicationClassName (mamaSession session, const char** className)
 {
+    mamaSessionImpl     *sessionImpl = (mamaSessionImpl*)session;
+
     if (className == NULL) return MAMA_STATUS_NULL_ARG;
-    *className = appContext.myApplicationClass;
+
+    *className = sessionImpl->appContext.mApplicationClass;
     return MAMA_STATUS_OK;
 }
 
 static void
-mamaInternal_loadProperties (const char *path,
-                             const char *filename)
+mamaInternal_loadProperties (mamaSession session,
+                             const char  *path,
+                             const char  *filename)
 {
-    wproperty_t fileProperties;
+    mamaSessionImpl  *sessionImpl = (mamaSessionImpl*)session;
+    wproperty_t      fileProperties;
 
-    if( gProperties == 0 )
+    if( sessionImpl->gProperties == NULL )
     {
-        gProperties = properties_Create ();
+        sessionImpl->gProperties = properties_Create ();
     }
 
     if( !path )
@@ -356,35 +213,37 @@ mamaInternal_loadProperties (const char *path,
 
     fileProperties = properties_Load (path, filename);
 
-    if( fileProperties == 0 )
+    if( fileProperties == NULL )
     {
-            mama_log (MAMA_LOG_LEVEL_ERROR, "Failed to open properties file.\n");
+        mama_log (MAMA_LOG_LEVEL_ERROR, "Failed to open properties file.\n");
         return;
     }
 
     /* We've got file properties, so we need to merge 'em into
      * anything we've already gotten */
-    properties_Merge( fileProperties, gProperties );
+    properties_Merge( fileProperties, sessionImpl->gProperties );
 
     /* Free the file properties, note that FreeEx2 is called to ensure that the data
      * isn't freed as the pointers have been copied over to gProperties.
      */
-    properties_FreeEx2(gProperties);
-    
-   gProperties =  fileProperties;
+    /* DMAG: This seems like a pretty unusual setup, given the comment above.
+     */
+    properties_FreeEx2(sessionImpl->gProperties);
+
+    sessionImpl->gProperties = fileProperties;
 }
 
-static int mamaInternal_statsPublishingEnabled (void)
+static int mamaInternal_statsPublishingEnabled (mamaSessionImpl* sessionImpl)
 {
-    return (gPublishGlobalStats
-         || gPublishTransportStats
-         || gPublishQueueStats
-         || gPublishLbmStats
-         || gPublishUserStats);
+    return (sessionImpl->sessionStats.gPublishGlobalStats
+         || sessionImpl->sessionStats.gPublishTransportStats
+         || sessionImpl->sessionStats.gPublishQueueStats
+         || sessionImpl->sessionStats.gPublishLbmStats
+         || sessionImpl->sessionStats.gPublishUserStats);
 }
 
 static mama_status
-mamaInternal_createStatsPublisher (void)
+mamaInternal_createStatsPublisher (mamaSessionImpl* sessionImpl)
 {
     mama_status         result                  = MAMA_STATUS_OK;
     mamaMiddlewareLib*  middlewareLib           = NULL;
@@ -395,11 +254,13 @@ mamaInternal_createStatsPublisher (void)
     const char*         statsLogTportName       = NULL;
     const char*         statsLogMiddlewareName  = NULL;
 
+    mamaStatsLogger     statsPublisher         = sessionImpl->statsCollector.gStatsPublisher;
+
     mama_log (MAMA_LOG_LEVEL_NORMAL, "Stats publishing enabled");
 
-    statsLogTportName       = properties_Get (gProperties,
+    statsLogTportName       = properties_Get (sessionImpl->gProperties,
                                               "mama.statslogging.transport");
-    statsLogMiddlewareName  = properties_Get (gProperties,
+    statsLogMiddlewareName  = properties_Get (sessionImpl->gProperties,
                                               "mama.statslogging.middleware");
 
     if (!statsLogMiddlewareName)
@@ -407,9 +268,10 @@ mamaInternal_createStatsPublisher (void)
         statsLogMiddlewareName = "wmw";
     }
 
+    /* DMAG: Do we want to possibly load a bridge dynamically here? */
     middlewareLib = (mamaMiddlewareLib*)wtable_lookup (
-                                            gImpl.middlewares.table,
-                                            statsLogMiddlewareName);
+                                    sessionImpl->middlewares.table,
+                                    statsLogMiddlewareName);
 
     if (NULL == middlewareLib || NULL == middlewareLib->bridge)
     {
@@ -429,22 +291,22 @@ mamaInternal_createStatsPublisher (void)
         return result;
     }
 
-    result = mamaStatsLogger_allocate (&gStatsPublisher);
+    result = mamaStatsLogger_allocate (&statsPublisher);
 
     if( result != MAMA_STATUS_OK )
         return result;
 
-    mama_getUserName (&userName);
-    mamaStatsLogger_setReportSize       (gStatsPublisher, 100);
-    mamaStatsLogger_setUserName         (gStatsPublisher, userName);
-    mamaStatsLogger_setIpAddress        (gStatsPublisher, getIpAddress());
-    mamaStatsLogger_setHostName         (gStatsPublisher, getHostName());
-    mamaStatsLogger_setApplicationName  (gStatsPublisher,
+    mama_getUserName (sesssionImpl, &userName);
+    mamaStatsLogger_setReportSize       (statsPublisher, 100);
+    mamaStatsLogger_setUserName         (statsPublisher, userName);
+    mamaStatsLogger_setIpAddress        (statsPublisher, getIpAddress());
+    mamaStatsLogger_setHostName         (statsPublisher, getHostName());
+    mamaStatsLogger_setApplicationName  (statsPublisher,
                                          appContext.myApplicationName);
-    mamaStatsLogger_setApplicationClass (gStatsPublisher,
+    mamaStatsLogger_setApplicationClass (statsPublisher,
                                          appContext.myApplicationClass);
 
-    mamaStatsLogger_setLogMsgStats (gStatsPublisher, 0);
+    mamaStatsLogger_setLogMsgStats (statsPublisher, 0);
 
     if (!statsLogTportName)
     {
@@ -461,7 +323,7 @@ mamaInternal_createStatsPublisher (void)
     if (result != MAMA_STATUS_OK)
         return result;
 
-    result = mamaStatsLogger_createForStats (gStatsPublisher,
+    result = mamaStatsLogger_createForStats (statsPublisher,
                                              queue,
                                              statsLogTport,
                                              STATS_TOPIC);
@@ -477,16 +339,18 @@ mamaInternal_createStatsPublisher (void)
 }
 
 static mama_status
-mamaInternal_enableStatsLogging (void)
+mamaInternal_enableStatsLogging (mamaSessionImpl *sessionImpl)
 {
     mama_status     result                  = MAMA_STATUS_OK;
     const char*     statsLogIntervalStr     = NULL;
 
+    mamaSessionStats *sessionStats          = &(sessionImpl->sessionStats);
+
     mama_log (MAMA_LOG_LEVEL_NORMAL, "Stats logging enabled");
 
-    if (mamaInternal_statsPublishingEnabled())
+    if (mamaInternal_statsPublishingEnabled(sessionImpl))
     {
-        if (MAMA_STATUS_OK != (result = mamaInternal_createStatsPublisher ()))
+        if (MAMA_STATUS_OK != (result = mamaInternal_createStatsPublisher (sessionImpl)))
         {
             mama_log (MAMA_LOG_LEVEL_ERROR,
                       "mamaInternal_enableStatsLogging(): "
@@ -498,20 +362,20 @@ mamaInternal_enableStatsLogging (void)
     mama_log (MAMA_LOG_LEVEL_NORMAL, "Stats logging interval [%s]",
                                     statsLogIntervalStr ? statsLogIntervalStr : "");
     mama_log (MAMA_LOG_LEVEL_NORMAL, "Stats logging: global stats logging %s",
-                                     gGenerateGlobalStats ? "enabled" : "disabled");
+                                     sessionStats->gGenerateGlobalStats ? "enabled" : "disabled");
     mama_log (MAMA_LOG_LEVEL_NORMAL, "Stats logging: transport stats logging %s",
-                                     gGenerateTransportStats ? "enabled" : "disabled");
+                                     sessionStats->gGenerateTransportStats ? "enabled" : "disabled");
     mama_log (MAMA_LOG_LEVEL_NORMAL, "Stats logging: queue stats logging %s",
-                                     gGenerateQueueStats ? "enabled" : "disabled");
+                                     sessionStats->gGenerateQueueStats ? "enabled" : "disabled");
 
 
-    if (gGenerateGlobalStats)
+    if (sessionStats->gGenerateGlobalStats)
     {
         const char* appName;
-        mama_getApplicationName (&appName);
+        mama_getApplicationName (sessionImpl, &appName);
 
         if (MAMA_STATUS_OK != (result =
-            mamaStatsCollector_create (&gGlobalStatsCollector,
+            mamaStatsCollector_create (&(sessionStats->gGlobalStatsCollector),
                                        MAMA_STATS_COLLECTOR_TYPE_GLOBAL,
                                        appName,
                                        "-----")))
@@ -519,19 +383,19 @@ mamaInternal_enableStatsLogging (void)
             return result;
         }
 
-        if (!gLogGlobalStats)
+        if (!sessionStats->gLogGlobalStats)
         {
             if (MAMA_STATUS_OK != (result =
-                mamaStatsCollector_setLog (gGlobalStatsCollector, 0)))
+                mamaStatsCollector_setLog (sessionStats->gGlobalStatsCollector, 0)))
             {
                 return MAMA_STATUS_OK;
             }
         }
 
-        if (gPublishGlobalStats)
+        if (sessionStats->gPublishGlobalStats)
         {
             if (MAMA_STATUS_OK != (result =
-                mamaStatsCollector_setPublish (gGlobalStatsCollector, 1)))
+                mamaStatsCollector_setPublish (sessionStats->gGlobalStatsCollector, 1)))
             {
                 return MAMA_STATUS_OK;
             }
@@ -539,112 +403,112 @@ mamaInternal_enableStatsLogging (void)
             mama_log (MAMA_LOG_LEVEL_NORMAL, "Stats publishing enabled for global stats");
         }
 
-        result = mamaStat_create (&gInitialStat,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gInitialStat,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatInitials.mName,
                                   MamaStatInitials.mFid);
         if (result != MAMA_STATUS_OK) return result;
 
-        result = mamaStat_create (&gRecapStat,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gRecapStat,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatRecaps.mName,
                                   MamaStatRecaps.mFid);
         if (result != MAMA_STATUS_OK) return result;
 
-        result = mamaStat_create (&gUnknownMsgStat,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gUnknownMsgStat,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatUnknownMsgs.mName,
                                   MamaStatUnknownMsgs.mFid);
         if (result != MAMA_STATUS_OK) return result;
 
-        result = mamaStat_create (&gMessageStat,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gMessageStat,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatNumMessages.mName,
                                   MamaStatNumMessages.mFid);
         if (result != MAMA_STATUS_OK) return result;
 
-        result = mamaStat_create (&gFtTakeoverStat,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gFtTakeoverStat,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatFtTakeovers.mName,
                                   MamaStatFtTakeovers.mFid);
         if (result != MAMA_STATUS_OK) return result;
 
-        result = mamaStat_create (&gSubscriptionStat,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gSubscriptionStat,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatNumSubscriptions.mName,
                                   MamaStatNumSubscriptions.mFid);
         if (result != MAMA_STATUS_OK) return result;
 
-        result = mamaStat_create (&gTimeoutStat,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gTimeoutStat,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatTimeouts.mName,
                                   MamaStatTimeouts.mFid);
         if (result != MAMA_STATUS_OK) return result;
 
-        result = mamaStat_create (&gWombatMsgsStat,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gWombatMsgsStat,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatWombatMsgs.mName,
                                   MamaStatWombatMsgs.mFid);
         if (result != MAMA_STATUS_OK) return result;
 
-        result = mamaStat_create (&gFastMsgsStat,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gFastMsgsStat,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatFastMsgs.mName,
                                   MamaStatFastMsgs.mFid);
         if (result != MAMA_STATUS_OK) return result;
 
-        result = mamaStat_create (&gRvMsgsStat,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gRvMsgsStat,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatRvMsgs.mName,
                                   MamaStatRvMsgs.mFid);
         if (result != MAMA_STATUS_OK) return result;
 
-        result = mamaStat_create (&gPublisherSend,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gPublisherSend,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatPublisherSend.mName,
                                   MamaStatPublisherSend.mFid);
         if (result != MAMA_STATUS_OK) return result;
 
-        result = mamaStat_create (&gPublisherInboxSend,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gPublisherInboxSend,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatPublisherInboxSend.mName,
                                   MamaStatPublisherInboxSend.mFid);
         if (result != MAMA_STATUS_OK) return result;
 
-        result = mamaStat_create (&gPublisherReplySend,
-                                  gGlobalStatsCollector,
+        result = mamaStat_create (&sessionStats->gPublisherReplySend,
+                                  sessionStats->gGlobalStatsCollector,
                                   MAMA_STAT_LOCKABLE,
                                   MamaStatPublisherReplySend.mName,
                                   MamaStatPublisherReplySend.mFid);
         if (result != MAMA_STATUS_OK) return result;
-        mamaStatsGenerator_addStatsCollector (gStatsGenerator, gGlobalStatsCollector);
+        mamaStatsGenerator_addStatsCollector (sessionStats->gStatsGenerator, sessionStats->gGlobalStatsCollector);
     }
 
-    if (gLogQueueStats || gLogTransportStats || gLogGlobalStats || gLogLbmStats || gLogUserStats)
+    if (sessionStats->gLogQueueStats || sessionStats->gLogTransportStats || sessionStats->gLogGlobalStats || sessionStats->gLogLbmStats || sessionStats->gLogUserStats)
     {
-        mamaStatsGenerator_setLogStats (gStatsGenerator, 1);
+        mamaStatsGenerator_setLogStats (sessionStats->gStatsGenerator, 1);
     }
     else
     {
-        mamaStatsGenerator_setLogStats (gStatsGenerator, 0);
+        mamaStatsGenerator_setLogStats (sessionStats->gStatsGenerator, 0);
     }
 
-    if (gStatsPublisher != NULL)
+    if (sessionStats->gStatsPublisher != NULL)
     {
         if (MAMA_STATUS_OK != (result =
-                        mamaStatsGenerator_setStatsLogger (gStatsGenerator, &gStatsPublisher)))
+                        mamaStatsGenerator_setStatsLogger (sessionStats->gStatsGenerator, &sessionStats->gStatsPublisher)))
         {
             return result;
         }
@@ -654,24 +518,24 @@ mamaInternal_enableStatsLogging (void)
 }
 
 mamaStatsGenerator
-mamaInternal_getStatsGenerator()
+mamaInternal_getStatsGenerator(mamaSessionImpl *sessionImpl)
 {
-    return gStatsGenerator;
+    return sessionImpl->sessionStats.gStatsGenerator;
 }
 
 mamaStatsCollector
-mamaInternal_getGlobalStatsCollector()
+mamaInternal_getGlobalStatsCollector(mamaSessionImpl *sessionImpl)
 {
-    return gGlobalStatsCollector;
+    return sessionImpl->sessionStats.gGlobalStatsCollector;
 }
 
 /**
  * Expose the property object
  */
 wproperty_t
-mamaInternal_getProperties()
+mamaInternal_getProperties(mamaSessionImpl *sessionImpl)
 {
-  return gProperties;
+  return sessionImpl->gProperties;
 }
 
 /**
@@ -680,9 +544,9 @@ mamaInternal_getProperties()
  * @return A mamaBridge representing the first available bridge.
  */
 mamaBridge
-mamaInternal_findBridge ()
+mamaInternal_findBridge (mamaSessionImpl *sessionImpl)
 {
-    mamaMiddlewareLib* middlewareLib = gImpl.middlewares.byIndex[0];
+    mamaMiddlewareLib* middlewareLib = sessionImpl->middlewares.byIndex[0];
     mamaBridge bridge = NULL;
 
     /* If it exists, take the first bridge from the middlewares index. */
@@ -695,14 +559,14 @@ mamaInternal_findBridge ()
 }
 
 mamaPayloadBridge
-mamaInternal_findPayload (char id)
+mamaInternal_findPayload (mamaSessionImpl *sessionImpl, char id)
 {
     mamaPayloadLib* payloadLib = NULL;
 
     if (MAMA_PAYLOAD_NULL == id)
         return NULL;
 
-    payloadLib = gImpl.payloads.byChar[(uint8_t)id];
+    payloadLib = sessionImpl->payloads.byChar[(uint8_t)id];
 
     if (NULL != payloadLib)
     {
@@ -715,15 +579,15 @@ mamaInternal_findPayload (char id)
 }
 
 mamaPayloadBridge
-mamaInternal_getDefaultPayload (void)
+mamaInternal_getDefaultPayload (mamaSessionImpl *sessionImpl)
 {
-    return gDefaultPayload;
+    return sessionImpl->gDefaultPayload;
 }
 
 mama_bool_t
-mamaInternal_getAllowMsgModify (void)
+mamaInternal_getAllowMsgModify (mamaSessionImpl *sessionImpl)
 {
-    return gAllowMsgModify;
+    return sessionImpl->gAllowMsgModify;
 }
 
 mama_status
@@ -1122,6 +986,8 @@ mama_setupStatsGenerator (void)
 
     return result;
 }
+
+/* Open a MAMA Session
 
 mama_status
 mama_open ()

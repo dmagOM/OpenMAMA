@@ -80,6 +80,63 @@ do                                                                             \
 while(0)
 
 /**
+ * @brief MAMA Session Statistics information
+ *
+ * Stores the session stats and configuration for the current MAMA session
+ */
+typedef struct mamaSessionStats_ {
+
+    /* Session Stats Configuration*/
+    int gLogQueueStats          = 1;
+    int gLogTransportStats      = 1;
+    int gLogGlobalStats         = 1;
+    int gLogLbmStats            = 1;
+    int gLogUserStats           = 1;
+
+    int gGenerateQueueStats     = 0;
+    int gGenerateTransportStats = 0;
+    int gGenerateGlobalStats    = 0;
+    int gGenerateLbmStats       = 0;
+    int gGenerateUserStats       = 0;
+
+    int gPublishQueueStats      = 0;
+    int gPublishTransportStats  = 0;
+    int gPublishGlobalStats     = 0;
+    int gPublishLbmStats        = 0;
+    int gPublishUserStats       = 0;
+
+    mamaStatsLogger  gStatsPublisher  = NULL;
+
+    mamaStatsGenerator      gStatsGenerator         = NULL;
+    mamaStatsCollector      gGlobalStatsCollector   = NULL;
+
+    /* Session Statistics */
+    mamaStat                gInitialStat;
+    mamaStat                gRecapStat;
+    mamaStat                gUnknownMsgStat;
+    mamaStat                gMessageStat;
+    mamaStat                gFtTakeoverStat;
+    mamaStat                gSubscriptionStat;
+    mamaStat                gTimeoutStat;
+    mamaStat                gWombatMsgsStat;
+    mamaStat                gFastMsgsStat;
+    mamaStat                gRvMsgsStat;
+    mamaStat                gPublisherSend;
+    mamaStat                gPublisherInboxSend;
+    mamaStat                gPublisherReplySend;
+
+} mamaSessionStats;
+
+/**
+ * @brief Structure for storing combined mamaBridge and LIB_HANDLE data
+ */
+typedef struct mamaMiddlewareLib_
+{
+    mamaBridge  bridge;
+    LIB_HANDLE  library;
+} mamaMiddlewareLib;
+
+/**
  * @brief Structure for storing combined mamaPayloadBridge and LIB_HANDLE data.
  */
 typedef struct mamaPayloadLib_
@@ -92,7 +149,6 @@ typedef struct mamaPayloadLib_
     mama_bool_t       mamaAllocated;
 } mamaPayloadLib;
 
-
 /*
  * @brief Structure for storing combined mamaEntitlementBridge and LIB_HANDLE data.
  */
@@ -102,6 +158,152 @@ typedef struct mamaPayloadLib_
     LIB_HANDLE            library;
 } mamaEntitlementLib;
 
+/**
+ * @brief Structure for managing the loaded middleware libraries
+ */
+typedef struct mamaMiddlewares_
+{
+    /* wtable of loaded middlewares, keyed by middleware name */
+    wtable_t            table;
+
+    /* Array of loaded middleware libraries, indexed by order of load */
+    mamaMiddlewareLib*  byIndex[MAMA_MAX_MIDDLEWARES];
+
+    /* Count of number of currently loaded middlewares */
+    mama_i32_t          count;
+} mamaMiddlewares;
+
+/**
+ * @brief Structure for managing loaded payload libraries
+ */
+typedef struct mamaPayloads_
+{
+    /* wtable of loaded payloads, keyed by payload name */
+    wtable_t            table;
+
+    /* Array indexed by char id, for rapid access when required. */
+    mamaPayloadLib*     byChar[MAMA_PAYLOAD_MAX];
+
+    /* Count of number of currently loaded payloads */
+    mama_i32_t          count;
+} mamaPayloads;
+
+/**
+ * @brief Structure for managing loaded entitlement libraries
+ */
+typedef struct mamaEntitlements_
+{
+    /* wtable of loaded entitlement libraries, keyed by name */
+    wtable_t            table;
+
+    /* Array of loaded entitlement libraries, indexed by order loaded */
+    mamaEntitlementLib* byIndex[MAMA_MAX_ENTITLEMENTS];
+
+    /* Count of number of currently loaded entitlement libraries */
+    mama_i32_t          count;
+} mamaEntitlements;
+
+/**
+ * struct mamaApplicationGroup
+ * Contains the name of the application and its class name.
+ */
+typedef struct mamaAppContext_
+{
+    const char* mApplicationName;
+    const char* mApplicationClass;
+} mamaApplicationContext;
+
+/**
+ * *NOTE* The MamaImpl structure is being replaced with the mamaSession
+ * We'll keep it around while we decide if we need any additional global state
+ *
+ * This structure contains data needed to control starting and stopping of
+ * mama.
+ */
+typedef struct mamaImpl_
+{
+    int PLACEHOLDER = 0;
+} mamaImpl;
+
+/**
+ *  @brief MamaSession object stores per session MAMA information. 
+ *
+ *  We're attempting to extract the core of MAMA's global state into a single
+ *  reusable structure. The idea is to be able to spin up multiple distinct
+ *  MAMA libraries within a single process space (fully separated). 
+ *
+ *  Items which make up part of the MAMA Session object:
+ *      - Properties objects
+ *      - MAMA Middleware Libraries
+ *      - MAMA Payload Libraries
+ *      - Session stats configuration and stats logs. 
+ */ 
+typedef struct mamaSessionImpl_ {
+
+    /* Session Stats */
+    mamaSessionStats        sessionStats;
+
+    /* Struct containing loaded middleware bridges. */
+    mamaMiddlewares         middlewares;
+
+    /* Struct containing loaded payload bridges */
+    mamaPayloads            payloads;
+
+    /* Struct containing loaded entitlement bridges */
+    mamaEntitlements        entitlements;
+
+    unsigned int            mRefCount;
+
+    /* wInterlockedInt indicating if the struct has been successfully initialised */
+    wInterlockedInt         init;
+
+    wthread_static_mutex_t  mLock;
+
+    /* Internal properties */
+    wproperty_t             internalProperties;
+
+    /* Version Information */
+    versionInfo             version;
+
+    mama_bool_t             gAllowMsgModify = 0;
+
+    int                     gCatchCallbackExceptions = 0;
+
+    wproperty_t             gProperties      = 0;
+
+    mamaPayloadBridge       gDefaultPayload = NULL;
+
+    wthread_key_t           last_err_key;
+
+    mamaApplicationContext  appContext;
+
+    char mama_ver_string[256];
+} mamaSessionImpl;
+
+/************************************************************************/
+/* Globals from mama.c */
+/* By the time this is complete, we should not have anything left in this
+ * section
+ */
+
+/* Need to discuss the entitlements setup - might be worth keeping
+ * these as part of the global state.
+ */
+mamaEntitlementCallbacks  gEntitlementCallbacks;
+extern const char*        gEntitlementBridges[MAX_ENTITLEMENT_BRIDGES];
+
+
+//  static mamaImpl gImpl = {
+//                            { NULL, {0}, 0 },         /* middlewares */
+//                            { NULL, {0}, 0 },         /* payloads */
+//                            { NULL, {0}, 0 },         /* entitlements */
+//                            0,                        /* myRefCount */
+//                            0,                        /* init */
+//                            WSTATIC_MUTEX_INITIALIZER,/* myLock */
+//                            NULL
+//                        };
+
+/**************************************************************************/
 
 /**
 * Check whether Callbacks are run in 'debug' catch exceptions mode

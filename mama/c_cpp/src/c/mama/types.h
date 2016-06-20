@@ -62,6 +62,12 @@ typedef uint32_t        mama_seqnum_t;
                          (lhs) - (rhs) < MAMA_QUANTITY_EPSILON)
 
 /*
+ * The Session structure which contains the core implementation objects
+ * for the current MAMA Session
+ */
+typedef struct mamaSession_* mamaSession;
+
+/*
  * The bridge implementation required when creating many of the core
  * MAMA objects.
  */

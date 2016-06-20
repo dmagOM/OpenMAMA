@@ -121,38 +121,70 @@ extern "C"
      *
      */
 
-	mama_status
-	mama_setDefaultPayload (char id);
+    /** Set the default payload to use for a specific MAMA session.
+     *
+     * @param session The MAMA session to set the default payload for.
+     * @param id The character ID of the payload to change
+     */
+    /* DMAG: Can we make a mamaPayload version of this? */
+    mama_status
+    mama_setDefaultPayload (mamaSession session,
+                            char        id);
 
-   /** Load the bridge specified by middleware string.
+    /** Load the bridge specified by middleware string.
      * If the bridge has already been loaded then the existing bridge instance
      * will be returned.
-     * @param impl The bridge object
-     * @param middleware  The middleware string. Can be "wmw", "lbm" or
-     * "tibrv".
+     *
+     * @param session The MAMA Session to load the bridge for.
+     * @param[out] impl The bridge object
+     * @param middleware The middleware string. Can be any available middleware
+     * string.
+     *
      * @return mama_status Whether the call was successful or not.
      */
     MAMAExpDLL
     extern mama_status
-    mama_loadBridge (mamaBridge* impl, const char*  middleware);
+    mama_loadBridge (mamaSession session,
+                     mamaBridge* impl,
+                     const char* middleware);
 
+    /** Load the payload bridge specified by the payloadName string.
+     *
+     * If the bridge has already been loaded then the existign payload bridge
+     * instance will be returned. 
+     *
+     * @param session The MAMA Session to load the bridge for.
+     * @param[out] impl The payload bridge object
+     * @param payloadName The payload string name to load.
+     *
+     * @return mama_status Whether the call was successful or not.
+     */
     MAMAExpDLL
     extern mama_status
-    mama_loadPayloadBridge (mamaPayloadBridge*  bridge,  const char* payloadName);
+    mama_loadPayloadBridge (mamaSession         session,
+                            mamaPayloadBridge*  bridge,
+                            const char*         payloadName);
 
 
-    /** Load the bridge specified by middleware string using the path specified by the user.
+    /** Load the bridge specified by middleware string using the path specified
+     *  in the path parameter.
+     *
      * If the bridge has already been loaded then the existing bridge instance
      * will be returned.
-     * @param impl The bridge object
-     * @param middleware  The middleware string. Can be "wmw", "lbm" or
-     * "tibrv".
+     *
+     * @param session The MAMA Session to load the bridge for.
+     * @param[out] impl The bridge object
+     * @param middleware  The middleware string. Can be any available middleware string.  
      * @param path The path to the bridge library
+     *
      * @return mama_status Whether the call was successful or not.
      */
     MAMAExpDLL
     extern mama_status
-    mama_loadBridgeWithPath (mamaBridge* impl, const char*  middleware, const char* path);
+    mama_loadBridgeWithPath (mamaSession session,
+                             mamaBridge* impl,
+                             const char* middleware,
+                             const char* path);
 
     #define MAMA_LINK_BRIDGE(implIdentifier, impl)                  \
     do                                                              \
@@ -182,17 +214,18 @@ extern "C"
      */
 
     /**
-     * Initialize MAMA.
+     * Initialize MAMA Session.
      *
      * MAMA employs a reference count to track multiple
      * calls to mama_open() and mama_close(). The count is incremented every time
      * mama_open() is called and decremented when mama_close() is called. The
      * resources are not actually released until the count reaches zero.
      *
+     * @param[out] session The MAMA Session to open.
      */
     MAMAExpDLL
     extern mama_status
-    mama_open (void);
+    mama_open (mamaSession* session);
 
     /**
      * Initialize MAMA.
@@ -202,14 +235,14 @@ extern "C"
      * mama_open() is called and decremented when mama_close() is called. The
      * resources are not actually released until the count reaches zero.
      *
+     * @param[out] session The MAMA Session to open. 
      * @param[out] count The reference count for the MAMA library after opening 
      * once. This will be non-zero and will match the amount of times a
      * mama_open() variant has been called.
-     *
      */
     MAMAExpDLL
     extern mama_status
-    mama_openCount (unsigned int* count);
+    mama_openCount (mamaSession* session, unsigned int* count);
 
     /**
      * Initialize MAMA.
@@ -232,6 +265,7 @@ extern "C"
      * mama_open() is called and decremented when mama_close() is called. The
      * resources are not actually released until the count reaches zero.
      *
+     * @param[out] session The MAMA Session to open.
      * @param path Fully qualified path to the directory containing the properties
      * file
      * @param filename The name of the file containing MAMA properties.
@@ -240,7 +274,8 @@ extern "C"
      */
     MAMAExpDLL
     extern mama_status
-    mama_openWithProperties (const char*    path,
+    mama_openWithProperties (mamaSession*   session,
+                             const char*    path,
                              const char*    filename);
 
     /**
@@ -264,6 +299,7 @@ extern "C"
      * mama_open() is called and decremented when mama_close() is called. The
      * resources are not actually released until the count reaches zero.
      *
+     * @param[out] session The MAMA Session to open.
      * @param path Fully qualified path to the directory containing the properties
      * file
      * @param filename The name of the file containing MAMA properties.
@@ -275,12 +311,13 @@ extern "C"
      */
     MAMAExpDLL
     extern mama_status
-    mama_openWithPropertiesCount (const char*    path,
+    mama_openWithPropertiesCount (mamaSession*   session,
+                                  const char*    path,
                                   const char*    filename,
                                   unsigned int*  count);
 
     /**
-     * Set a specific property for the API.
+     * Set a specific property for the current MAMA Session.
      *
      * If the property being set has already been given a value from a properties
      * file that value will be replaced.
@@ -291,6 +328,7 @@ extern "C"
      *
      * The strings passed to the function are copied.
      *
+     * @param[out] session The session for which to set the property value.
      * @param name The name of the property being set.
      * @param value The value of the property being set.
      *
@@ -299,65 +337,71 @@ extern "C"
      */
     MAMAExpDLL
     extern mama_status
-    mama_setProperty (const char* name,
+    mama_setProperty (mamaSession session,
+                      const char* name,
                       const char* value);
 
     /**
-         * Load a set of properties through the API.
-         *
-         * If the property being set has already been given a value from a properties
-         * file that value will be replaced.
-         *
-         * The properties file must have the same structure as a standard
-         * mama.properties file.
-         *
-         * If null is passed as the path the API will look for the properties file on
-         * the \$WOMBAT_PATH.
-         *
-         *
-         * @param path Fully qualified path to the directory containing the properties
-         * file
-         * @param filename The name of the file containing properties.
-         *
-         *
-         * @return MAMA_STATUS_NULL_ARG is either name or value is null.
-         *         MAMA_STATUS_OK if the function completed successfully.
-         */
-
+     * Load a set of properties through the API.
+     *
+     * If the property being set has already been given a value from a properties
+     * file that value will be replaced.
+     *
+     * The properties file must have the same structure as a standard
+     * mama.properties file.
+     *
+     * If null is passed as the path the API will look for the properties file on
+     * the \$WOMBAT_PATH.
+     *
+     * @param session The MAMA Session for which to load the properties.
+     * @param path Fully qualified path to the directory containing the properties
+     * file
+     * @param filename The name of the file containing properties.
+     *
+     *
+     * @return MAMA_STATUS_NULL_ARG is either name or value is null.
+     *         MAMA_STATUS_OK if the function completed successfully.
+     */
     MAMAExpDLL
     extern mama_status
-    mama_setPropertiesFromFile (const char *path,
-                                const char *filename);
+    mama_setPropertiesFromFile (mamaSession session,
+                                const char  *path,
+                                const char  *filename);
 
     /**
      * Retrieve a specific property from the API.
      *
      * If the property has not been set, a NULL value will be returned.
      *
+     * @param session The MAMA Session from which you want the property retrieved
      * @param name The name of the property to retrieve.
      *
      * @return the value of the property or NULL if unset.
      */
     MAMAExpDLL
     extern const char *
-    mama_getProperty (const char* name);
+    mama_getProperty (mamaSession session,
+                      const char* name);
 
     /**
-     * Close MAMA and free all associated resources if no more references exist
-     * (e.g.if open has been called 3 times then it will require 3 calls to 
-     * close in order for all resources to be freed).
+     * Close the requested MAMA session and free all associated resources if
+     * no more references exist (e.g.if open has been called 3 times then it
+     * will require 3 calls to close in order for all resources to be freed).
+     *
+     * @param session The MAMA Session to close.
      *
      * @return mama_status Whether the call was successful or not.
      */
     MAMAExpDLL
     extern mama_status
-    mama_close (void);
+    mama_close (mamaSession session);
 
     /**
      * Close MAMA and free all associated resources if no more references exist
      * (e.g.if open has been called 3 times then it will require 3 calls to 
      * close in order for all resources to be freed).
      *
+     * @param session The MAMA Session to close.
      * @param[out] count The reference count for the MAMA library after closing 
      * once.  If this is zero then MAMA and all resources will have been freed.
      *
@@ -365,7 +409,7 @@ extern "C"
      */
     MAMAExpDLL
     extern mama_status
-    mama_closeCount (unsigned int* count);
+    mama_closeCount (mamaSession session, unsigned int* count);
 
     /**
     * Return the version information for the library.
@@ -373,10 +417,12 @@ extern "C"
     *
     * @param bridgeImpl The bridge specific structure.
     */
+    /* DMAG: Verion info is probably global to MAMA, but bridges will be
+     * local to a specific session. Need to decide what to do about this.
+     */
     MAMAExpDLL
     extern const char*
     mama_getVersion (mamaBridge bridgeImpl);
-
 
     /**
      * Start processing messages on the internal queue. This starts Mama's
@@ -451,29 +497,36 @@ extern "C"
     mama_stop (mamaBridge bridgeImpl);
 
     /**
-     * Stop dispatching on the default event queue for all bridges.
+     * Stop dispatching on the default event queue for all bridges for a
+     * specific session.
+     *
+     * @param session The MAMA Session to close the default event queue for.
      */
     MAMAExpDLL
     extern mama_status
-    mama_stopAll (void);
+    mama_stopAll (mamaSession session;
 
     /**
-     mama_setApplicationName - sets the mama application name
-     This should be called before mama_open
-     *@param applicationName
+     * Sets the application name for the given MAMA Session
+     * This should be called before mama_open 
+     *
+     * @param session The MAMA session to set the application name for.
+     * @param applicationName the Application name to set.
      */
     MAMAExpDLL
     mama_status
-    mama_setApplicationName (const char* applicationName);
+    mama_setApplicationName (mamaSession session, const char* applicationName);
 
     /**
-     mama_setApplicationClass - sets the mama class name
-     This should be called before mama_open
-     *@param className
+     * Sets the class name for the given MAMA Session.
+     * This should be called before mama_open
+     *
+     * @param session The MAMA session to set the class name for.
+     * @param className the class name to set.
      */
     MAMAExpDLL
     mama_status
-    mama_setApplicationClassName (const char* className);
+    mama_setApplicationClassName (mamaSession session, const char* className);
 
     /**
      Entitlement disconnect status codes
@@ -543,47 +596,60 @@ extern "C"
      */
     MAMAExpDLL
     mama_status
-    mama_registerEntitlementCallbacks (const mamaEntitlementCallbacks* entitlementCallbacks);
+    mama_registerEntitlementCallbacks (const mamaEntitl
+            ementCallbacks* entitlementCallbacks);
 
     /**
-     mama_getApplicationName - gets the mama application name
-     *@param applicationName address of where to put applicationName
+     * Return the Application name for the specified MAMA Session.
+     *
+     * @param session The MAMA Session to return the name for.
+     * @param[out] applicationName address of where to put applicationName
      */
     MAMAExpDLL
     mama_status
-    mama_getApplicationName (const char** applicationName);
+    mama_getApplicationName (mamaSession  session,
+                             const char** applicationName);
 
     /**
-     mama_getApplicationClass - sets the mama class name
-     *@param className address of where to put className
+     * Return the class name for the specified MAMA Session.
+     *
+     * @param session The MAMA Session to return the name for.
+     * @param[out] className address of where to put className.
      */
     MAMAExpDLL
     mama_status
-    mama_getApplicationClassName (const char**  className);
+    mama_getApplicationClassName (mamaSession  session,
+                                  const char** className);
 
     /**
-     mama_getUserName - gets the user name
-     *@param userName address of where to put user name
+     * Return the user name for the specified MAMA Session.
+     *
+     * @param session The MAMA Session to return the user name for.
+     * @param userName[out] address of where to put user name
      */
     MAMAExpDLL
     mama_status
-    mama_getUserName (const char** userName);
+    mama_getUserName (mamaSession session, const char** userName);
 
     /**
-     mama_getHostName - gets the host name
-     *@param hostName address of where to put host name
+     * Return the host name for the specified MAMA Session.
+     *
+     * @param session The MAMA Session to return the host name for.
+     * @param[out] hostName Return parameter for the host name.
      */
     MAMAExpDLL
     mama_status
-    mama_getHostName (const char** hostName);
+    mama_getHostName (mamaSession session, const char** hostName);
 
     /**
-     mama_getIpAddressName - gets the IP Address
-     *@param  ipAddress address of where to put IP address
+     * Return the IP address for the specified MAMA session.
+     *
+     * @param session The MAMA session to return the IP address for.
+     * @param[out] ipAddress Return parameter for the IP address.
      */
     MAMAExpDLL
     mama_status
-    mama_getIpAddress (const char** ipAddress);
+    mama_getIpAddress (mamaSession session, const char** ipAddress);
 
     /**
     * Get a reference to the internal default event queue in use for the specified
@@ -647,19 +713,22 @@ extern "C"
     extern mama_status
     mama_setBridgeInfoCallback (mamaBridge         bridgeImpl,
                                 bridgeInfoCallback callback);
-    /**
-     * Add a user stats collector 
-     */
-    MAMAExpDLL
-    extern mama_status
-    mama_addStatsCollector (mamaStatsCollector  statsCollector);
 
     /**
-     * Remove a user stats collector 
+     * Add a user stats collector to the given MAMA Session. 
      */
     MAMAExpDLL
     extern mama_status
-    mama_removeStatsCollector (mamaStatsCollector  statsCollector);
+    mama_addStatsCollector (mamaSession        session,
+                            mamaStatsCollector statsCollector);
+
+    /**
+     * Remove a user stats collector from the given MAMA Session.
+     */
+    MAMAExpDLL
+    extern mama_status
+    mama_removeStatsCollector (mamaSession        session,
+                               mamaStatsCollector statsCollector);
 
 #if defined(__cplusplus)
 }
